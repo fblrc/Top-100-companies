@@ -42,7 +42,10 @@ jobs:
           git add public history
           # commit solo se qualcosa e' cambiato; [skip ci] evita di ri-innescare il workflow
           git diff --staged --quiet || git commit -m "Snapshot $DATE [skip ci]"
-          git push
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || true
+            git push && break || sleep 5
+          done
 
       - uses: actions/upload-pages-artifact@v3
         with:
