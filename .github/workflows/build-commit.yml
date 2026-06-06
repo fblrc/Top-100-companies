@@ -1,0 +1,59 @@
+name: Build, commit & deploy dashboard
+
+on:
+  schedule:
+    - cron: "0 23 * * 1-5"   # feriali, 23:00 UTC (dopo la chiusura USA)
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write            # serve per ricommittare i file generati
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      - name: Genera, storicizza e committa
+        run: |
+          set -e
+          mkdir -p public history
+          python dashboard.py --out public/index --top 100
+          DATE=$(date -u +%F)
+          # Storico LEGGERO: solo il CSV datato (~18 KB) -> sostenibile nel tempo.
+          cp public/index.csv "history/$DATE.csv"
+          # OPZIONALE — storico HTML datato (~7 MB/giorno, gonfia il repo):
+          # decommenta la riga sotto solo se ti serve riaprire le pagine storiche.
+          # cp public/index.html "history/$DATE.html"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public history
+          # commit solo se qualcosa e' cambiato; [skip ci] evita di ri-innescare il workflow
+          git diff --staged --quiet || git commit -m "Snapshot $DATE [skip ci]"
+          git push
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
